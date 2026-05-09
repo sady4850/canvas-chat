@@ -8,8 +8,6 @@ import { processPDFFile } from "./pdf-processor.js";
 import { storePDFFile, getPDFFile } from "./pdf-storage.js";
 import { hashFile, createChunks, buildIngestPayload } from "./rag-utils.js";
 import type { PDFPageResult } from './types/pdf.types.js';
-import { useAuthShell } from "../auth-shell/index";
-import type { AuthShellContextValue } from "../auth-shell/AuthShellContext";
 
 /**
  * Global PDF drop handler that intercepts PDF files at document level
@@ -18,8 +16,6 @@ import type { AuthShellContextValue } from "../auth-shell/AuthShellContext";
  * full PDF processing functionality.
  */
 export const usePDFDropHandler = (excalidrawAPI: ExcalidrawImperativeAPI | null): void => {
-  const authShell = useAuthShell();
-
   useEffect(() => {
     const handleGlobalDrop = async (e: DragEvent): Promise<void> => {
       if (!e.dataTransfer?.files || !excalidrawAPI) return;
@@ -159,23 +155,18 @@ export const usePDFDropHandler = (excalidrawAPI: ExcalidrawImperativeAPI | null)
 
             // RAG ingestion (non-blocking)
             try {
-              await ingestPDFForRAG(pdfFile, originalFileId, excalidrawAPI, authShell);
+              await ingestPDFForRAG(pdfFile, originalFileId, excalidrawAPI);
             } catch (ragError) {
               console.warn('RAG ingestion failed (non-blocking):', ragError);
               // Don't show error toast for RAG failures to keep UX smooth
             }
 
             // Check existing document status after drop (non-blocking)
-            if (authShell?.getToken) {
-              try {
-                const statusToken = await authShell.getToken();
-                if (statusToken) {
-          await checkExistingDocumentStatus(originalFileId, excalidrawAPI, statusToken);
-        }
-      } catch (statusError) {
-        console.warn('Document status check failed (non-blocking):', statusError);
-      }
-    }
+            try {
+              await checkExistingDocumentStatus(originalFileId, excalidrawAPI);
+            } catch (statusError) {
+              console.warn('Document status check failed (non-blocking):', statusError);
+            }
 
           } catch (error) {
             console.error('PDF processing failed:', error);
@@ -201,10 +192,9 @@ export const usePDFDropHandler = (excalidrawAPI: ExcalidrawImperativeAPI | null)
  * Ingest PDF for RAG system (non-blocking background process)
  */
 async function ingestPDFForRAG(
-  pdfFile: File, 
-  originalFileId: string, 
-  excalidrawAPI: ExcalidrawImperativeAPI,
-  authShell: AuthShellContextValue | null
+  pdfFile: File,
+  originalFileId: string,
+  excalidrawAPI: ExcalidrawImperativeAPI
 ): Promise<void> {
   // Check if RAG indexing is enabled (privacy setting)
   const ragIndexingEnabled = localStorage.getItem('excalidraw-rag-indexing') !== 'false';
@@ -259,35 +249,14 @@ async function ingestPDFForRAG(
     // Build ingestion payload
     const payload = buildIngestPayload(pdfFile.name, sourceHash, chunks);
     
-  // Get auth token
-  const token = authShell?.getToken ? await authShell.getToken() : null;
-  if (!token) {
-    console.warn('PDF RAG indexing requires authentication');
-    excalidrawAPI.setToast({
-      message: 'Please sign in to enable PDF search indexing',
-      duration: 4000
-      });
-      return;
-    }
-
     // Ingest document
     const ingestResponse = await fetch(`${LLM_SERVICE_URL}/v1/rag/ingest`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(payload)
     });
-
-    if (ingestResponse.status === 401) {
-      console.warn('PDF RAG indexing requires authentication');
-      excalidrawAPI.setToast({
-        message: 'Please sign in to enable PDF search indexing',
-        duration: 4000
-      });
-      return;
-    }
 
     if (!ingestResponse.ok) {
       throw new Error(`Ingestion failed: ${ingestResponse.status} ${ingestResponse.statusText}`);
@@ -341,11 +310,10 @@ async function ingestPDFForRAG(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ documentId })
       });
-      
+
       if (embedResponse.ok) {
         const { jobId, total, batchSize, accessToken } = await embedResponse.json();
         
@@ -419,7 +387,7 @@ async function ingestPDFForRAG(
           });
           
           // Start progress tracking (SSE preferred, polling fallback)
-          startEmbeddingProgressTracking(jobId, originalFileId, excalidrawAPI, LLM_SERVICE_URL, accessToken, token);
+          startEmbeddingProgressTracking(jobId, originalFileId, excalidrawAPI, LLM_SERVICE_URL, accessToken);
           
           // Show progress toast with cancellation info
           excalidrawAPI.setToast({
@@ -480,14 +448,13 @@ function startEmbeddingProgressTracking(
   originalFileId: string,
   excalidrawAPI: ExcalidrawImperativeAPI,
   llmServiceUrl: string,
-  accessToken?: string,
-  authToken?: string
+  accessToken?: string
 ): void {
   // Try SSE first, fallback to polling if it fails
   const useSSE = typeof EventSource !== 'undefined';
-  
+
   if (useSSE && accessToken) {
-    startEmbeddingSSETracking(jobId, originalFileId, excalidrawAPI, llmServiceUrl, accessToken, authToken);
+    startEmbeddingSSETracking(jobId, originalFileId, excalidrawAPI, llmServiceUrl, accessToken);
   } else {
     console.log(`EventSource not available, using polling for job ${jobId}`);
     startEmbeddingJobPolling(jobId, originalFileId, excalidrawAPI, llmServiceUrl);
@@ -502,8 +469,7 @@ function startEmbeddingSSETracking(
   originalFileId: string,
   excalidrawAPI: ExcalidrawImperativeAPI,
   llmServiceUrl: string,
-  accessToken: string,
-  authToken?: string
+  accessToken: string
 ): void {
   let cancelled = false;
 
@@ -515,9 +481,6 @@ function startEmbeddingSSETracking(
     try {
       const cancelResponse = await fetch(`${llmServiceUrl}/v1/rag/embed-jobs/${jobId}`, {
         method: 'DELETE',
-        headers: authToken
-          ? { 'Authorization': `Bearer ${authToken}` }
-          : undefined
       });
       
       if (cancelResponse.ok) {
@@ -801,8 +764,7 @@ function startEmbeddingJobPolling(
  */
 async function checkExistingDocumentStatus(
   originalFileId: string,
-  excalidrawAPI: ExcalidrawImperativeAPI,
-  token: string
+  excalidrawAPI: ExcalidrawImperativeAPI
 ): Promise<void> {
   // Find PDF element to get document ID
   const elements = excalidrawAPI.getSceneElements();
@@ -828,11 +790,7 @@ async function checkExistingDocumentStatus(
   
   try {
     // Check document status
-    const statusResponse = await fetch(`${LLM_SERVICE_URL}/v1/rag/doc/${documentId}/status`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    const statusResponse = await fetch(`${LLM_SERVICE_URL}/v1/rag/doc/${documentId}/status`);
 
     if (!statusResponse.ok) {
       if (statusResponse.status === 404) {
@@ -865,27 +823,26 @@ async function checkExistingDocumentStatus(
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({ documentId })
           });
-          
+
           if (embedResponse.ok) {
             const { jobId, total, accessToken } = await embedResponse.json();
-            
+
             if (jobId === null || total === 0) {
               console.log('✅ No additional embedding needed - document is complete');
               updatePdfElementStatus(originalFileId, 'embedded', excalidrawAPI);
               return;
             }
-            
+
             console.log(`🚀 Resumed embedding for "${title}" - Job: ${jobId} (${total} remaining chunks)`);
-            
+
             // Update element to show running status
             updatePdfElementStatus(originalFileId, 'running', excalidrawAPI);
-            
+
             // Start progress tracking
-            startEmbeddingProgressTracking(jobId, originalFileId, excalidrawAPI, LLM_SERVICE_URL, accessToken, token);
+            startEmbeddingProgressTracking(jobId, originalFileId, excalidrawAPI, LLM_SERVICE_URL, accessToken);
             
             excalidrawAPI.setToast({
               message: `Resumed PDF indexing (${total} chunks remaining)`,

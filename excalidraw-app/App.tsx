@@ -85,7 +85,6 @@ import {
 import {
   FIREBASE_STORAGE_PREFIXES,
   isExcalidrawPlusSignedUser,
-  isPremiumSignedUser,
   STORAGE_KEYS,
   SYNC_BROWSER_TABS_TIMEOUT,
 } from "./app_constants";
@@ -866,7 +865,7 @@ const ExcalidrawWrapper = () => {
             <div className="excalidraw-ui-top-right">
               {excalidrawAPI?.getEditorInterface().formFactor === "desktop" && (
                 <ExcalidrawPlusPromoBanner
-                  isSignedIn={isPremiumSignedUser}
+                  isSignedIn={false}
                 />
               )}
 
