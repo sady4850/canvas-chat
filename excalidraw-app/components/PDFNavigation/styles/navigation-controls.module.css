@@ -18,7 +18,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   z-index: 1000;
-  
+
   /* Smooth transitions for position changes */
   transition: opacity 0.2s ease-in-out;
 }
@@ -92,12 +92,12 @@
     font-size: 11px;
     padding: 4px 8px;
   }
-  
+
   .controlButton {
     padding: 3px 5px;
     font-size: 13px;
   }
-  
+
   .pageInfo {
     font-size: 10px;
     margin: 0 6px;
@@ -110,7 +110,7 @@
     background: black;
     border: 2px solid white;
   }
-  
+
   .controlButton:hover {
     background: white;
     color: black;
@@ -122,11 +122,11 @@
   .navigationControls {
     transition: none;
   }
-  
+
   .controlButton {
     transition: none;
   }
-  
+
   .controlButton:active {
     transform: none;
   }
@@ -140,19 +140,19 @@
     border: 1px solid rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(4px);
   }
-  
+
   .navigationControls:hover {
     background: rgba(255, 255, 255, 0.9);
   }
-  
+
   .controlButton {
     color: #1a1a1a;
   }
-  
+
   .controlButton:hover {
     background: rgba(0, 0, 0, 0.1);
   }
-  
+
   .controlButton:active {
     background: rgba(0, 0, 0, 0.2);
   }
