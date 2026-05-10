@@ -1,19 +1,12 @@
-import {
-  loginIcon,
-  ExcalLogo,
-  eyeIcon,
-  PlusPromoIcon,
-} from "@excalidraw/excalidraw/components/icons";
+import { eyeIcon } from "@excalidraw/excalidraw/components/icons";
 import { MainMenu } from "@excalidraw/excalidraw/index";
-import React, { useCallback } from "react";
+import React from "react";
 
 import { isDevEnv } from "@excalidraw/common";
 
 import type { Theme } from "@excalidraw/element/types";
 
 import { LanguageList } from "../app-language/LanguageList";
-import { isPremiumSignedUser } from "../app_constants";
-import { useAuthShell } from "../auth-shell";
 
 import { saveDebugState } from "./DebugCanvas";
 
@@ -25,45 +18,6 @@ export const AppMainMenu: React.FC<{
   setTheme: (theme: Theme | "system") => void;
   refresh: () => void;
 }> = React.memo((props) => {
-  const authShell = useAuthShell();
-
-  const defaultAuthBase = import.meta.env.VITE_APP_PLUS_APP?.trim() ?? "";
-  const authBaseUrl =
-    import.meta.env.VITE_AUTH_SERVICE_URL?.trim() || defaultAuthBase;
-
-  const normalizeBaseUrl = (baseUrl: string) =>
-    baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-
-  const appendUtmParams = (url: string) => {
-    const utmSuffix = "utm_source=signin&utm_medium=app&utm_content=hamburger";
-    return url.includes("?") ? `${url}&${utmSuffix}` : `${url}?${utmSuffix}`;
-  };
-
-  const authPath = isPremiumSignedUser ? "/sign-in" : "/sign-up";
-  const authLabel = isPremiumSignedUser ? "Sign in" : "Sign up";
-
-  const baseForHref =
-    authBaseUrl && authBaseUrl.length > 0
-      ? normalizeBaseUrl(authBaseUrl)
-      : defaultAuthBase.length > 0
-        ? normalizeBaseUrl(defaultAuthBase)
-        : "";
-
-  const authHref =
-    baseForHref.length > 0
-      ? appendUtmParams(`${baseForHref}${authPath}`)
-      : "#";
-
-  const handleSignOut = useCallback(() => {
-    if (!authShell) {
-      return;
-    }
-
-    Promise.resolve(authShell.signOut()).catch((error) => {
-      console.error("[AuthShell] Sign out failed", error);
-    });
-  }, [authShell]);
-
   return (
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
@@ -82,25 +36,6 @@ export const AppMainMenu: React.FC<{
       <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
 
-      {authShell && authShell.hasActiveSubscription && (
-        <MainMenu.Item
-          icon={PlusPromoIcon}
-          onSelect={() => {
-            window.location.href = "/settings/billing";
-          }}
-        >
-          Account settings
-        </MainMenu.Item>
-      )}
-      {!authShell && (
-        <MainMenu.ItemLink
-          icon={loginIcon}
-          href={authHref}
-          className="highlighted"
-        >
-          {authLabel}
-        </MainMenu.ItemLink>
-      )}
       {isDevEnv() && (
         <MainMenu.Item
           icon={eyeIcon}

@@ -22,8 +22,6 @@ import { useAppLangCode } from '../app-language/language-state';
 import { ChatHeader } from './ChatPanel/ChatHeader';
 import { ChatInputBar } from './ChatPanel/ChatInputBar';
 import { ChatMessagesList } from './ChatPanel/ChatMessagesList';
-import { isAuthShellEnabled } from '../app_constants';
-import { useAuthShell } from '../auth-shell/AuthShellContext';
 
 const concatWithSpace = (base: string, addition: string) => {
   const trimmedAddition = addition.trim();
@@ -58,16 +56,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const chatPanelRef = useRef<HTMLDivElement>(null);
   const collabAPI = useAtomValue(collabAPIAtom);
-  const canAccessPremiumFeatures = isAuthShellEnabled;
-  const premiumCollabAPI = canAccessPremiumFeatures ? collabAPI : null;
   const [appLangCode] = useAppLangCode();
   const speechBaseRef = useRef('');
 
   // Custom hooks
   const { focusCitation } = useCitationFocus({ excalidrawAPI });
   const { generateSnapshots } = useSnapshots({ excalidrawAPI, isVisible });
-  const authShell = useAuthShell();
-  const getToken = authShell?.getToken;
   const {
     aiInvited,
     isInvitingAI,
@@ -76,10 +70,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     hasCollabAPI
   } = useInviteAI({
     excalidrawAPI,
-    collabAPI: premiumCollabAPI,
+    collabAPI,
     isVisible,
-    onError: setError,
-    getToken
+    onError: setError
   });
   const {
     streamingState,
@@ -92,8 +85,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     onMessagesUpdate: setMessages,
     onError: setError,
     generateSnapshots,
-    getToken,
-    collabAPI: premiumCollabAPI
+    collabAPI
   });
 
   const {
@@ -126,10 +118,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const LLM_BASE_URL = getLLMBaseURL();
 
   const checkServiceHealth = useCallback(async () => {
-    if (!canAccessPremiumFeatures) {
-      setIsConnected(false);
-      return;
-    }
     try {
       const response = await fetch(`${LLM_BASE_URL}/health`);
       const contentType = response.headers.get('content-type') || '';
@@ -144,24 +132,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       setIsConnected(false);
       if (isDev()) console.error('Failed to check service health:', err);
     }
-  }, [LLM_BASE_URL, canAccessPremiumFeatures]);
+  }, [LLM_BASE_URL]);
 
-  // Check service health on mount and when base URL/auth gating changes
+  // Check service health on mount and when base URL changes
   useEffect(() => {
-    if (canAccessPremiumFeatures) {
-      checkServiceHealth();
-    }
-  }, [canAccessPremiumFeatures, checkServiceHealth]);
+    checkServiceHealth();
+  }, [checkServiceHealth]);
 
   // Simple wrapper for sending messages via hook
   const sendMessage = useCallback(async () => {
     const trimmed = inputMessage.trim();
-    if (!trimmed || !canAccessPremiumFeatures) return;
+    if (!trimmed) return;
     setInputMessage('');
     speechBaseRef.current = '';
     resetSpeech();
     await sendChatMessage(trimmed);
-  }, [inputMessage, canAccessPremiumFeatures, sendChatMessage, resetSpeech]);
+  }, [inputMessage, sendChatMessage, resetSpeech]);
 
   // Cleanup streaming on unmount
   useEffect(() => {
@@ -238,14 +224,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   const clearHistory = async () => {
-    if (!canAccessPremiumFeatures) {
-      return;
-    }
     try {
-      const token = await (getToken ? getToken() : Promise.resolve(null));
       await fetch(`${LLM_BASE_URL}/v1/chat/history/default`, {
         method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
       setMessages([]);
       setError(null);
@@ -255,11 +236,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   const handleInviteAI = useCallback(async () => {
-    if (!canAccessPremiumFeatures) {
-      return;
-    }
     await inviteAI();
-  }, [inviteAI, canAccessPremiumFeatures]);
+  }, [inviteAI]);
 
   if (!isVisible) {
     return null; // Button is now handled in renderTopRightUI
@@ -303,7 +281,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           setInputMessage(value);
         }}
         onSend={sendMessage}
-        disabled={!canAccessPremiumFeatures || !isConnected || isLoading}
+        disabled={!isConnected || isLoading}
         placeholder={isConnected ? "Type your message..." : "Service disconnected"}
         speechSupported={speechSupported}
         speechStatus={speechStatus}
